@@ -415,6 +415,36 @@ async def test_customize_loggers(monkeypatch):
         stat_loggers[0][0].log.assert_called_once()
 
 
+@pytest.mark.asyncio
+async def test_customize_global_loggers(monkeypatch):
+    """Test that we can customize the loggers.
+    If a customized logger is provided at the init, it should
+    be added to the default loggers.
+    """
+
+    with monkeypatch.context() as m, ExitStack() as after:
+        m.setenv("VLLM_USE_V1", "1")
+
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(
+                TEXT_ENGINE_ARGS,
+                stat_loggers=[MockLoggingStatLogger],
+                stat_logger_global=MockLoggingStatLogger,
+            )
+        after.callback(engine.shutdown)
+
+        await engine.do_log_stats()
+
+        stat_loggers = engine.logger_manager.per_engine_logger_dict
+        assert len(stat_loggers) == 1
+        assert len(
+            stat_loggers[0]) == 2  # LoggingStatLogger + MockLoggingStatLogger
+        global_logger = engine.logger_manager.global_logger
+        assert global_logger is not None
+        global_logger.log.assert_called_once()
+        stat_loggers[0][0].log.assert_called_once()
+
+
 @pytest.mark.asyncio(scope="module")
 async def test_dp_rank_argument(monkeypatch: pytest.MonkeyPatch):
     with monkeypatch.context() as m, ExitStack() as after:
